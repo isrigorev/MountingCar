@@ -141,10 +141,10 @@ def true_online_sarsa_lambda(env, num_episodes=NUM_EPISODES):
             # traces[active] = np.maximum(traces[active], 1.0)
 
             # Голландский след - показал значительно лучшие результаты чем замещающий след
-            # z ← γλ·z + (1 − αγλ·zᵀφ)·φ
-            z_dot_phi = np.sum(traces[active])       
+            # z ← γλ·z + (1 − αγλ·zᵀx)·x
+            z_dot_x = np.sum(traces[active])       
             traces *= GAMMA * LAMBDA
-            traces[active] += 1.0 - ALPHA * GAMMA * LAMBDA * z_dot_phi
+            traces[active] += 1.0 - ALPHA * GAMMA * LAMBDA * z_dot_x
 
             q_old = q_hat
             q_hat = q_hat_next
