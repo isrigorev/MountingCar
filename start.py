@@ -8,6 +8,7 @@ warnings.filterwarnings("ignore", message=".*CRASHES ARE TO BE EXPECTED.*")
 
 import numpy as np
 import gymnasium as gym
+import matplotlib.pyplot as plt
 from tiles3 import tiles, IHT
 
 
@@ -15,13 +16,17 @@ from tiles3 import tiles, IHT
 # ----------------------------- Параметры -----------------------------
 
 NUM_TILINGS   = 8
-IHT_SIZE      = 16384              # увеличил: 4096 мог переполняться
+IHT_SIZE      = 16384               # размер хеш таблицы для активных индексов
 ALPHA         = 0.1 / NUM_TILINGS  # 0.0125 — безопаснее, чем 0.5/N
 GAMMA         = 1.0
 LAMBDA        = 0.9
-EPSILON_START = 0.1
+EPSILON_START = 0.3
 EPSILON_MIN   = 0.001
-EPSILON_DECAY = 0.995
+EPSILON_DECAY = 0.99
+
+# EPSILON_START = 0.2
+# EPSILON_MIN   = 0.001
+# EPSILON_DECAY = 0.99
 
 NUM_EPISODES  = 900
 MAX_STEPS     = 1000
@@ -150,16 +155,14 @@ def true_online_sarsa_lambda(env, num_episodes=NUM_EPISODES):
             if step >= MAX_STEPS:
                 break
 
-        traces[:] = 0.0
+        traces[:] = 0.0 #сбрасываем следы для нового эпизода
 
         episode_returns.append(total_reward)
         episode_lengths.append(step)
 
         if (ep + 1) % 50 == 0:
             avg_ret = np.mean(episode_returns[-50:])
-            avg_len = np.mean(episode_lengths[-50:])
-            print(f"Эпизод {ep+1:4d} | ср. return {avg_ret:8.1f} | "
-                  f"ср. длина {avg_len:6.1f} | ε={epsilon:.3f} | "
+            print(f"Эпизод {ep+1:4d} | ср. return {avg_ret:8.1f} | ε={epsilon:.3f} | "
                   f"IHT={len(iht.dictionary)}/{IHT_SIZE}")
 
     return episode_returns, episode_lengths
@@ -186,8 +189,6 @@ def evaluate(env, num_episodes=20):
 
 
 def visualize(num_episodes=3, delay=0.02):
-    """Смотреть, как жадная политика играет в окне.
-    Создаёт СВОЙ env с render_mode='human' — не переиспользует обучающий."""
     import time
     env_vis = gym.make("MountainCar-v0", render_mode="human",
                        max_episode_steps=MAX_STEPS)
@@ -204,6 +205,41 @@ def visualize(num_episodes=3, delay=0.02):
             time.sleep(delay)
         print(f"Эпизод {ep+1}: {'успех' if terminated else 'провал'}, шагов={steps}")
     env_vis.close()
+
+def plot_learning(returns, lengths, window=20):
+    """Кривые обучения: return и длина эпизода со скользящим средним."""
+    def smooth(x, w):
+        # скользящее среднее, длина = len(x) - w + 1
+        return np.convolve(x, np.ones(w) / w, mode="valid")
+
+    fig, axes = plt.subplots(1, 2, figsize=(14, 4))
+
+    # --- Return ---
+    axes[0].plot(returns, alpha=0.25, color="tab:blue", label="raw")
+    axes[0].plot(range(window - 1, len(returns)), smooth(returns, window),
+                 color="tab:blue", linewidth=2, label=f"MA{window}")
+    axes[0].set_xlabel("episode")
+    axes[0].set_ylabel("return (total reward)")
+    axes[0].set_title("Learning curve: return")
+    axes[0].legend()
+    axes[0].grid(alpha=0.3)
+
+    # --- Длина эпизода ---
+    axes[1].plot(lengths, alpha=0.25, color="tab:orange", label="raw")
+    axes[1].plot(range(window - 1, len(lengths)), smooth(lengths, window),
+                 color="tab:orange", linewidth=2, label=f"MA{window}")
+    axes[1].axhline(110, color="red", linestyle="--", linewidth=1,
+                    label="~optimal (110)")
+    axes[1].set_xlabel("episode")
+    axes[1].set_ylabel("steps")
+    axes[1].set_title("Learning curve: episode length")
+    axes[1].legend()
+    axes[1].grid(alpha=0.3)
+
+    plt.tight_layout()
+    plt.savefig("learning_curves.png", dpi=120)
+    plt.show()
+
 # ----------------------------- Запуск -----------------------------
 
 if __name__ == "__main__":
@@ -214,10 +250,12 @@ if __name__ == "__main__":
     returns, lengths = true_online_sarsa_lambda(env)
 
     print("\n--- Оценка обученной политики (ε=0) ---")
-    succ = evaluate(env, 20)
-    print(f"Успешных эпизодов: {succ}/20")
+    num_epizodes_to_check_policy = 20
+    succ = evaluate(env, num_epizodes_to_check_policy)
+    print(f"Успешных эпизодов: {succ}/num_epizodes_to_check_policy")
     print(f"IHT заполнен: {len(iht.dictionary)}/{IHT_SIZE}")
 
     env.close()
-
-    visualize()
+    plot_learning(returns, lengths)
+    num_episodes_to_vizualize = 10
+    visualize(num_episodes_to_vizualize)
